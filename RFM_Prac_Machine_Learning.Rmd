@@ -1,0 +1,157 @@
+---
+title: 'Assignment: Prediction Assignment Writeup'
+author: "Gayathri Kulathumani"
+date: "March 31, 2016"
+output: html_document
+---
+
+###Executive Summary
+
+Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, that goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+###Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+###Exploratory Data Analysis
+
+```{r LoadingData}
+
+#loading library
+
+library(lattice)
+library(ggplot2)
+library(caret)
+library(rpart)
+library(randomForest)
+#library(ElemStatLearn)
+library(data.table)
+
+#reproducibility
+set.seed(321)
+
+# read data
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(trainUrl))
+testing <- read.csv(url(testUrl))                   
+
+
+```
+
+
+###Cleaning Data
+Before we do anything, we need to clean the data as there are many null or empty values in the data
+```{r cleaning}
+
+#Removing missing data
+RemoveMissing <- function(d) {
+  noMiss <- !sapply(d, function(x) any(is.na(x)))
+  d <- d[, noMiss]
+  
+  noMiss <- !sapply(d, function(x) any(x==""))
+  d <- d[, noMiss]
+  return(d)
+}  
+
+
+trainD<- RemoveMissing(training)
+testD<- RemoveMissing(testing)
+
+# To clean anything that isnt a predictor variable
+
+col.rm <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+            "cvtd_timestamp", "new_window", "num_window")
+
+d.rm <- which(colnames(trainD) %in% col.rm) 
+trainD <- trainD[, -d.rm] 
+
+d.rm <- which(colnames(testD) %in% col.rm) 
+testD <- testD[, -d.rm] 
+
+trainD$classe <- as.factor(trainD$classe)
+
+testD <- testD[,-ncol(testD)]
+
+
+```
+
+
+###Partioning training and testing data set
+Splitting test and training data sets
+```{r partition}
+inTrain = createDataPartition(trainD$classe, p=0.60, list=FALSE)
+trainingD = trainD[inTrain,]
+validatingD = trainD[-inTrain,]
+
+preObj <- preProcess(trainingD[, -ncol(trainingD)], method=c("center","scale"))
+preObj
+
+preClass<-predict(preObj,trainingD[, -ncol(trainingD)])
+DTrainClass <- data.table(trainingD$classe, preClass)
+names(DTrainClass)
+
+
+preObjV <- preProcess(validatingD[, -ncol(validatingD)], method=c("center","scale"))
+
+preClassV<-predict(preObj,validatingD[, -ncol(validatingD)])
+DValClass <- data.table(validatingD$classe, preClassV)
+
+
+```
+
+###Random Forest Model
+Using random forest model with the training data set. Estimated error rate is .65% and accuracy is 99% over validation dataset
+```{r RFM}
+trainingmodel <- randomForest(classe ~ .,data=trainingD)
+trainingmodel
+
+varImp(trainingmodel)
+
+m <- predict(trainingmodel,newdata=validatingD[,-ncol(validatingD)])
+confusionMatrix(m,validatingD$classe)
+
+
+```
+
+###Prediction
+```{r prediction}
+predictions <- predict(trainingmodel,newdata=testD)
+predictions
+```
+
+###For Submission
+
+```{r submit}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictions)
+```
+
+
+###References
+
+The training data for this project comes from:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data for this project comes from:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from:
+http://groupware.les.inf.puc-rio.br/har
